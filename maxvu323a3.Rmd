@@ -1,0 +1,139 @@
+---
+title: "ECON 323 Assignment 3"
+output: html_notebook
+---
+
+# Loading the data
+```{r load}
+rm(list=ls())
+
+library(plyr)
+library(dummies)
+library(stargazer)
+library(zoo)
+library(lubridate)
+library(fastDummies)
+
+db <- read.csv("timeseries.csv", header = TRUE, stringsAsFactors = FALSE)
+
+db2 <- subset(db, select=c(Ref_period,Current_dol_new_dwellings, Total_dwellings_num_units, Index_house, Mortgage_lending_rate))
+
+db2$Ref_period <- as.yearmon(db2$Ref_period)
+db2$year <- year(db2$Ref_period)
+db2$month <- month(db2$Ref_period)
+
+db2$Current_dol_new_dwellings <- db2$Current_dol_new_dwellings/1000
+
+db2$t <- seq.int(nrow(db2))
+
+db2 <- db2[, c(8,1,6,7,2,3,4,5)]
+
+db2 <- dummy_cols(db2, select_columns="month")
+```
+
+# Doing the first regression
+```{r regress}
+olsreg <- lm(Current_dol_new_dwellings ~ Total_dwellings_num_units 
+              + Index_house 
+              + Mortgage_lending_rate, data = db2)
+
+stargazer(olsreg, 
+          title="OLS regression",
+          type="text",
+          digits= 4)
+```
+
+# DW test for serial correlation
+```{r seri corr}
+library(lmtest)
+dwtest(olsreg)
+```
+DW returns a value smaller than the Dl value of 1.48 for n > 100 and k = 3. Therefore, we reject the null hypothesis that rho = 0 and hence, there is autocorrelation in the erros of this model. 
+
+# Plotting to demonstrate trending
+```{r plot}
+library(ggplot2)
+ggplot(aes(x = Ref_period, y = Current_dol_new_dwellings), data = db2) + geom_line()
+```
+
+# Regression with a linear time trend as a regressor
+```{r detrend by including linear time trend regressor}
+olsreg2 <- lm(Current_dol_new_dwellings ~ Total_dwellings_num_units 
+              + Index_house 
+              + Mortgage_lending_rate
+              + t, data = db2)
+
+stargazer(olsreg2, 
+          title="OLS regression 2",
+          type="text",
+          digits= 4)
+```
+
+```{r seri corr 2}
+dwtest(olsreg2)
+```
+
+Regression when controlling for seasonality
+```{r detrend by monthly dummy variable}
+olsreg3 <- lm(Current_dol_new_dwellings ~ Total_dwellings_num_units 
+              + Index_house 
+              + Mortgage_lending_rate
+              + t
+              + month_1
+              + month_2
+              + month_3
+              + month_4
+              + month_5
+              + month_6
+              + month_7
+              + month_8
+              + month_9
+              + month_10
+              + month_11
+              + month_12
+              , data = db2)
+
+stargazer(olsreg3, 
+          title="OLS regression 3",
+          type="text",
+          digits= 4)
+```
+
+```{r seri corr 3}
+dwtest(olsreg3)
+```
+
+# Regress a lag dependent variable
+```{r}
+library(dynlm)
+library(dyn)
+
+Yt <- ts(db2$Current_dol_new_dwellings)
+Xt <- ts(db2$Total_dwellings_num_units)
+Zt <- ts(db2$Index_house)
+Wt <- ts(db2$Mortgage_lending_rate)
+
+ols4 <- dynlm(Yt ~ Xt + Zt + Wt + lag(Yt, -1), data = db2)
+summary(ols4)
+```
+
+```{r test}
+library(nlme)
+BIC(ols4)
+```
+
+
+
+
+```{r something about detrend function we have yet to understand}
+#library(pracma)
+#db3 <- t(db2)
+#data.detrend <- detrend(db3, tt = 'linear')
+#data.detrend <- ts(as.numeric(data.detrend), start=c(1994, 1), end=c(2017,12), frequency=12)
+#str(data.detrend)
+#plot.ts(data.detrend)
+```
+
+
+
+
